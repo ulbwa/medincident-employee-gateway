@@ -32,11 +32,25 @@ components:
       discriminator:
         propertyName: type
         mapping:
+          access_denied: "#/components/schemas/AccessDeniedErrorDetails"
           integration_constraint: "#/components/schemas/IntegrationConstraintErrorDetails"
       properties:
         type:
           type: string
           description: Error details type discriminator.
+
+    AccessDeniedErrorDetails:
+      allOf:
+        - $ref: "#/components/schemas/ErrorDetails"
+        - type: object
+          required: [service, reason]
+          properties:
+            service:
+              type: string
+              description: Service or domain where access was denied.
+            reason:
+              type: string
+              description: Business reason for denied access.
 
     IntegrationConstraintErrorDetails:
       allOf:
@@ -68,12 +82,47 @@ components:
           format: float
           description: Longitude coordinate of the address
 
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the organization
+        name:
+          type: string
+          description: Name of the organization
+        legalAddress:
+          $ref: "#/components/schemas/Address"
+
     Clinic:
       type: object
+      required: [id, organization, name]
       properties:
         id:
           type: string
           description: Unique identifier for the clinic
+        organization:
+          $ref: "#/components/schemas/Organization"
+        name:
+          type: string
+          description: Name of the clinic
+        description:
+          type: string
+          description: Description of the clinic
+        address:
+          $ref: "#/components/schemas/Address"
+
+    ClinicBrief:
+      type: object
+      required: [id, orgId, name]
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the clinic
+        orgId:
+          type: string
+          description: Identifier of the organization the clinic belongs to
         name:
           type: string
           description: Name of the clinic
@@ -82,6 +131,23 @@ components:
 
     Department:
       type: object
+      required: [id, clinic, name]
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the department
+        clinic:
+          $ref: "#/components/schemas/Clinic"
+        name:
+          type: string
+          description: Name of the department
+        description:
+          type: string
+          description: Description of the department
+
+    DepartmentBrief:
+      type: object
+      required: [id, clinicId, name]
       properties:
         id:
           type: string
@@ -95,12 +161,7 @@ components:
 
     User:
       type: object
-      required:
-        - id
-        - name
-        - displayName
-        - email
-        - status
+      required: [id, name, displayName, email, status]
       properties:
         id:
           type: string
@@ -125,8 +186,6 @@ components:
             - active
             - inactive
           description: Status of the user account
-        clinic:
-          $ref: "#/components/schemas/Clinic"
         department:
           $ref: "#/components/schemas/Department"
         position:
@@ -189,9 +248,7 @@ components:
       type: array
       items:
         type: object
-        required:
-          - channel
-          - types
+        required: [channel, types]
         properties:
           channel:
             $ref: "#/components/schemas/NotificationChannel"
@@ -203,9 +260,7 @@ components:
 
     Settings:
       type: object
-      required:
-        - notification
-        - quietMode
+      required: [notification, quietMode]
       properties:
         notification:
           $ref: "#/components/schemas/NotificationSettings"
@@ -249,6 +304,18 @@ paths:
                 $ref: "#/components/schemas/Error"
               example:
                 message: Authorization header is missing or invalid
+        403:
+          description: Forbidden - user is not an employee of the organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: Access denied for this organization
+                details:
+                  type: access_denied
+                  service: organization
+                  reason: employee_required
 
   /users/profile/settings:
     put:
@@ -283,6 +350,18 @@ paths:
                 $ref: "#/components/schemas/Error"
               example:
                 message: Authorization header is missing or invalid
+        403:
+          description: Forbidden - user is not an employee of the organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: Access denied for this organization
+                details:
+                  type: access_denied
+                  service: organization
+                  reason: employee_required
         422:
           description: Business rule violation in settings update
           content:
