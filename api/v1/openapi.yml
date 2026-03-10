@@ -1,0 +1,297 @@
+openapi: 3.0.3
+info:
+  title: Medincident Employee API
+  version: "0.0.1"
+
+security:
+  - Token: []
+
+components:
+  securitySchemes:
+    Token:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Error message describing the issue
+        details:
+          $ref: "#/components/schemas/ErrorDetails"
+
+    ErrorDetails:
+      type: object
+      required:
+        - type
+      discriminator:
+        propertyName: type
+        mapping:
+          integration_constraint: "#/components/schemas/IntegrationConstraintErrorDetails"
+      properties:
+        type:
+          type: string
+          description: Error details type discriminator.
+
+    IntegrationConstraintErrorDetails:
+      allOf:
+        - $ref: "#/components/schemas/ErrorDetails"
+        - type: object
+          required:
+            - service
+            - reason
+          properties:
+            service:
+              type: string
+              description: External or internal service identifier related to the error.
+            reason:
+              type: string
+              description: Business meaning of the constraint violation.
+
+    Address:
+      type: object
+      properties:
+        value:
+          type: string
+          description: The address value
+        lat:
+          type: number
+          format: float
+          description: Latitude coordinate of the address
+        lng:
+          type: number
+          format: float
+          description: Longitude coordinate of the address
+
+    Clinic:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the clinic
+        name:
+          type: string
+          description: Name of the clinic
+        address:
+          $ref: "#/components/schemas/Address"
+
+    Department:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the department
+        clinicId:
+          type: string
+          description: Identifier of the clinic the department belongs to
+        name:
+          type: string
+          description: Name of the department
+
+    User:
+      type: object
+      required:
+        - id
+        - name
+        - displayName
+        - email
+        - status
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the user
+        name:
+          type: string
+          description: Username of the user
+        displayName:
+          type: string
+          description: Display name of the user
+        avatar:
+          type: string
+          format: uri
+          description: URL to the user's avatar image
+        email:
+          type: string
+          format: email
+          description: Email address of the user
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+          description: Status of the user account
+        clinic:
+          $ref: "#/components/schemas/Clinic"
+        department:
+          $ref: "#/components/schemas/Department"
+        position:
+          type: string
+          description: Job position of the user.
+
+    NotificationChannel:
+      type: string
+      enum:
+        - email
+        - push
+        - telegram
+
+    NotificationType:
+      type: string
+      enum:
+        - login_attempt
+        - login_failed
+        - password_changed
+        - profile_updated
+        - security_alert
+
+    QuietModeSettings:
+      type: object
+      description: Global quiet mode configuration applied to all notification channels.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: If true, notifications are muted during the configured window.
+          default: false
+        from:
+          type: string
+          format: time
+          description: Start time of quiet mode in HH:MM:SS format.
+        to:
+          type: string
+          format: time
+          description: End time of quiet mode in HH:MM:SS format.
+        timezone:
+          type: string
+          description: IANA timezone, for example Europe/Moscow.
+        daysOfWeek:
+          type: array
+          uniqueItems: true
+          description: Days when quiet mode is active.
+          items:
+            type: string
+            enum:
+              - monday
+              - tuesday
+              - wednesday
+              - thursday
+              - friday
+              - saturday
+              - sunday
+
+    NotificationSettings:
+      type: array
+      items:
+        type: object
+        required:
+          - channel
+          - types
+        properties:
+          channel:
+            $ref: "#/components/schemas/NotificationChannel"
+          types:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/NotificationType"
+
+    Settings:
+      type: object
+      required:
+        - notification
+        - quietMode
+      properties:
+        notification:
+          $ref: "#/components/schemas/NotificationSettings"
+        quietMode:
+          $ref: "#/components/schemas/QuietModeSettings"
+
+    Profile:
+      type: object
+      required:
+        - owner
+        - role
+      properties:
+        owner:
+          $ref: "#/components/schemas/User"
+        role:
+          type: string
+          enum:
+            - employee
+            - admin
+          description: Role of the profile owner
+        settings:
+          $ref: "#/components/schemas/Settings"
+
+paths:
+  /users/profile:
+    get:
+      summary: Get the profile of the currently authenticated user
+      operationId: getUserProfile
+      responses:
+        200:
+          description: Successful response with the user's profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        401:
+          description: Unauthorized - user is not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: Authorization header is missing or invalid
+
+  /users/profile/settings:
+    put:
+      summary: Replace user notification settings
+      operationId: updateUserSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Settings"
+      responses:
+        200:
+          description: Settings were updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        400:
+          description: Validation error in request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: Invalid settings payload
+        401:
+          description: Unauthorized - user is not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: Authorization header is missing or invalid
+        422:
+          description: Business rule violation in settings update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                message: Notification settings cannot be applied due to integration constraints
+                details:
+                  type: integration_constraint
+                  service: telegram
+                  reason: account_not_linked
