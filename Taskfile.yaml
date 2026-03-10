@@ -3,6 +3,7 @@ version: "3"
 vars:
   BIN_DIR: "{{.ROOT_DIR}}/bin"
   GOLANGCI_LINT: "{{.BIN_DIR}}/golangci-lint"
+  OPENAPI_VALIDATE: "{{.BIN_DIR}}/openapi-validate"
   GOVULNCHECK: "{{.BIN_DIR}}/govulncheck"
   GO_ENUM: "{{.BIN_DIR}}/go-enum"
   GCI: "{{.BIN_DIR}}/gci"
@@ -52,13 +53,30 @@ tasks:
     status:
       - test -x "{{.GOLANGCI_LINT}}"
 
+  install-openapi-validator:
+    desc: Install OpenAPI validator into {{.BIN_DIR}}
+    cmds:
+      - |
+        [ -x {{.OPENAPI_VALIDATE}} ] || {
+          mkdir -p "{{.BIN_DIR}}"
+          echo "[install-openapi-validator] installing kin-openapi validate"
+          GOBIN="{{.BIN_DIR}}" go install github.com/getkin/kin-openapi/cmd/validate
+          mv "{{.BIN_DIR}}/validate" "{{.OPENAPI_VALIDATE}}"
+          echo "[install-openapi-validator] installed: {{.OPENAPI_VALIDATE}}"
+        }
+    status:
+      - test -x "{{.OPENAPI_VALIDATE}}"
+
   lint:
-    desc: Run golangci-lint using local binary from {{.BIN_DIR}}
-    deps: [install-golangci-lint]
+    desc: Run golangci-lint and OpenAPI lint using local binaries from {{.BIN_DIR}}
+    deps: [install-golangci-lint, install-openapi-validator]
     cmds:
       - |
         echo "[lint] running golangci-lint"
         {{.GOLANGCI_LINT}} run ./... --config .golangci.yml
+      - |
+        echo "[lint] running OpenAPI lint"
+        {{.OPENAPI_VALIDATE}} api/v1/openapi.yml
 
   test:
     desc: Run Go tests
